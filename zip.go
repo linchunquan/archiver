@@ -210,7 +210,7 @@ func unzipFile(zf *zip.File, destination string) error {
 	filePath := filepath.Join(destination, zf.Name)
 	err = writeNewFile(filePath, rc, zf.FileInfo().Mode())
 	if err==nil{
-		os.Chtimes(filePath, zf.Modified, zf.Modified)
+		os.Chtimes(filePath, zf.FileInfo().ModTime(),  zf.FileInfo().ModTime())
 	}
 	return err
 }
