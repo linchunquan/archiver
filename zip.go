@@ -93,9 +93,14 @@ func zipFile(w *zip.Writer, source string) error {
 		baseDir = filepath.Base(source)
 	}
 
+	var gitConfigPath = filepath.Join(source,".git")
 	return filepath.Walk(source, func(fpath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return fmt.Errorf("walking to %s: %v", fpath, err)
+		}
+		//bypass .git directory
+		if strings.HasPrefix(fpath, gitConfigPath){
+			return nil
 		}
 
 		header, err := zip.FileInfoHeader(info)
@@ -202,7 +207,12 @@ func unzipFile(zf *zip.File, destination string) error {
 	}
 	defer rc.Close()
 
-	return writeNewFile(filepath.Join(destination, zf.Name), rc, zf.FileInfo().Mode())
+	filePath := filepath.Join(destination, zf.Name)
+	err = writeNewFile(filePath, rc, zf.FileInfo().Mode())
+	if err==nil{
+		os.Chtimes(filePath, zf.Modified, zf.Modified)
+	}
+	return err
 }
 
 // compressedFormats is a (non-exhaustive) set of lowercased
