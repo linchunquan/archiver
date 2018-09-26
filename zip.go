@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"log"
 )
 
 // Zip is for Zip format
@@ -53,9 +54,22 @@ func isZip(zipPath string) bool {
 // Files with an extension for formats that are already
 // compressed will be stored only, not compressed.
 func (zipFormat) Write(output io.Writer, filePaths []string) error {
+	log.Printf(">>>>>>>>>>>>>>>>>>>>>>>> write >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>:%+v",filePaths)
 	w := zip.NewWriter(output)
 	for _, fpath := range filePaths {
 		if err := zipFile(w, fpath); err != nil {
+			w.Close()
+			return err
+		}
+	}
+
+	return w.Close()
+}
+
+func (zipFormat) WriteOneByOne(output io.Writer, filePathPrefix string, filePaths []string) error {
+	w := zip.NewWriter(output)
+	for _, fpath := range filePaths {
+		if err := zipFileOneByOne(w, filePathPrefix, fpath); err != nil {
 			w.Close()
 			return err
 		}
@@ -80,6 +94,73 @@ func (zipFormat) Make(zipPath string, filePaths []string) error {
 	defer out.Close()
 
 	return Zip.Write(out, filePaths)
+}
+
+func zipFileOneByOne(w *zip.Writer, pathPrefix string, source string) error {
+
+	sourceInfo, err := os.Stat(source)
+	if err != nil {
+		return fmt.Errorf("%s: stat: %v", source, err)
+	}
+
+	var baseDir string
+	var hasPrefix = strings.HasPrefix(source, pathPrefix)
+	if hasPrefix{
+		baseDir = filepath.Base(pathPrefix)
+	}else{
+		if sourceInfo.IsDir(){
+			baseDir = filepath.Base(source)
+		}
+	}
+
+	header, err := zip.FileInfoHeader(sourceInfo)
+	if err != nil {
+		return fmt.Errorf("%s: getting header: %v", source, err)
+	}
+
+	if baseDir != "" && hasPrefix{
+		name, err := filepath.Rel(pathPrefix, source)
+		if err != nil {
+			return err
+		}
+		header.Name = path.Join(baseDir, filepath.ToSlash(name))
+	}
+
+	if sourceInfo.IsDir() {
+		header.Name += "/"
+		header.Method = zip.Store
+	} else {
+		ext := strings.ToLower(path.Ext(header.Name))
+		if _, ok := compressedFormats[ext]; ok {
+			header.Method = zip.Store
+		} else {
+			header.Method = zip.Deflate
+		}
+	}
+
+	writer, err := w.CreateHeader(header)
+	if err != nil {
+		return fmt.Errorf("%s: making header: %v", source, err)
+	}
+
+	if sourceInfo.IsDir() {
+		return nil
+	}
+
+	if header.Mode().IsRegular() {
+		file, err := os.Open(source)
+		if err != nil {
+			return fmt.Errorf("%s: opening: %v", source, err)
+		}
+		defer file.Close()
+
+		_, err = io.CopyN(writer, file, sourceInfo.Size())
+		if err != nil && err != io.EOF {
+			return fmt.Errorf("%s: copying contents: %v", source, err)
+		}
+	}
+
+	return nil
 }
 
 func zipFile(w *zip.Writer, source string) error {
