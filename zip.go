@@ -12,7 +12,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"log"
 )
 
 // Zip is for Zip format
@@ -54,7 +53,6 @@ func isZip(zipPath string) bool {
 // Files with an extension for formats that are already
 // compressed will be stored only, not compressed.
 func (zipFormat) Write(output io.Writer, filePaths []string) error {
-	log.Printf(">>>>>>>>>>>>>>>>>>>>>>>> write >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>:%+v",filePaths)
 	w := zip.NewWriter(output)
 	for _, fpath := range filePaths {
 		if err := zipFile(w, fpath); err != nil {
@@ -118,7 +116,7 @@ func zipFileOneByOne(w *zip.Writer, pathPrefix string, source string) error {
 		return fmt.Errorf("%s: getting header: %v", source, err)
 	}
 
-	if baseDir != "" && hasPrefix{
+	if baseDir != ""{
 		name, err := filepath.Rel(pathPrefix, source)
 		if err != nil {
 			return err

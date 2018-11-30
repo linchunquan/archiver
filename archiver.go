@@ -20,8 +20,6 @@ type Archiver interface {
 	Open(source, destination string) error
 	// Write writes an archive to a Writer.
 	Write(output io.Writer, sources []string) error
-	// Write writes an archive to a Writer.
-	WriteOneByOne(output io.Writer, pathPrefix string, sources []string) error
 	// Read reads an archive from a Reader.
 	Read(input io.Reader, destination string) error
 }
