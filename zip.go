@@ -64,6 +64,18 @@ func (zipFormat) Write(output io.Writer, filePaths []string) error {
 	return w.Close()
 }
 
+func (zipFormat) WriteWithFilterFunc(output io.Writer, filePaths []string, filterFunc func(path string)bool) error {
+	w := zip.NewWriter(output)
+	for _, fpath := range filePaths {
+		if err := zipFileWithFilterFunc(w, fpath, filterFunc); err != nil {
+			w.Close()
+			return err
+		}
+	}
+
+	return w.Close()
+}
+
 func (zipFormat) WriteOneByOne(output io.Writer, filePathPrefix string, filePaths []string) error {
 	w := zip.NewWriter(output)
 	for _, fpath := range filePaths {
@@ -179,6 +191,79 @@ func zipFile(w *zip.Writer, source string) error {
 		}
 		//bypass .git directory
 		if strings.HasPrefix(fpath, gitConfigPath){
+			return nil
+		}
+
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return fmt.Errorf("%s: getting header: %v", fpath, err)
+		}
+
+		if baseDir != "" {
+			name, err := filepath.Rel(source, fpath)
+			if err != nil {
+				return err
+			}
+			header.Name = path.Join(baseDir, filepath.ToSlash(name))
+		}
+
+		if info.IsDir() {
+			header.Name += "/"
+			header.Method = zip.Store
+		} else {
+			ext := strings.ToLower(path.Ext(header.Name))
+			if _, ok := compressedFormats[ext]; ok {
+				header.Method = zip.Store
+			} else {
+				header.Method = zip.Deflate
+			}
+		}
+
+		writer, err := w.CreateHeader(header)
+		if err != nil {
+			return fmt.Errorf("%s: making header: %v", fpath, err)
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if header.Mode().IsRegular() {
+			file, err := os.Open(fpath)
+			if err != nil {
+				return fmt.Errorf("%s: opening: %v", fpath, err)
+			}
+			defer file.Close()
+
+			_, err = io.CopyN(writer, file, info.Size())
+			if err != nil && err != io.EOF {
+				return fmt.Errorf("%s: copying contents: %v", fpath, err)
+			}
+		}
+
+		return nil
+	})
+}
+
+func zipFileWithFilterFunc(w *zip.Writer, source string, filterFunc func(path string)bool) error {
+	sourceInfo, err := os.Stat(source)
+	if err != nil {
+		return fmt.Errorf("%s: stat: %v", source, err)
+	}
+
+	var baseDir string
+	if sourceInfo.IsDir() {
+		baseDir = filepath.Base(source)
+	}
+
+	var gitConfigPath = filepath.Join(source,".git")
+	source = filepath.Dir(gitConfigPath)
+	return filepath.Walk(source, func(fpath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return fmt.Errorf("walking to %s: %v", fpath, err)
+		}
+		//bypass .git directory
+		if strings.HasPrefix(fpath, gitConfigPath) || filterFunc(fpath[len(source)+1:]){
 			return nil
 		}
 
