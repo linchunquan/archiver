@@ -263,7 +263,8 @@ func zipFileWithFilterFunc(w *zip.Writer, source string, filterFunc func(path st
 			return fmt.Errorf("walking to %s: %v", fpath, err)
 		}
 		//bypass .git directory
-		if strings.HasPrefix(fpath, gitConfigPath) || filterFunc(fpath[len(source)+1:]){
+		//fmt.Printf("=====>source:%s, fpath:%s\n",source,fpath)
+		if strings.HasPrefix(fpath, gitConfigPath) || len(fpath)>len(source)&&filterFunc(fpath[len(source)+1:]){
 			return nil
 		}
 
