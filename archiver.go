@@ -71,6 +71,32 @@ func writeNewFile(fpath string, in io.Reader, fm os.FileMode) error {
 	return nil
 }
 
+func writeNewFileWithFileInfo(fpath string, in io.Reader, fm os.FileMode, fi os.FileInfo) error {
+	err := os.MkdirAll(filepath.Dir(fpath), 0755)
+	if err != nil {
+		return fmt.Errorf("%s: making directory for file: %v", fpath, err)
+	}
+
+	out, err := os.Create(fpath)
+	if err != nil {
+		return fmt.Errorf("%s: creating new file: %v", fpath, err)
+	}
+	defer out.Close()
+
+	err = out.Chmod(fm)
+	if err != nil && runtime.GOOS != "windows" {
+		return fmt.Errorf("%s: changing file mode: %v", fpath, err)
+	}
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return fmt.Errorf("%s: writing file: %v", fpath, err)
+	}
+	modTime := fi.ModTime()
+	os.Chtimes(fpath, modTime,  modTime)
+	return nil
+}
+
 func writeNewSymbolicLink(fpath string, target string) error {
 	err := os.MkdirAll(filepath.Dir(fpath), 0755)
 	if err != nil {

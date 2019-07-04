@@ -158,6 +158,9 @@ func tarFile(tarWriter *tar.Writer, source, dest string) error {
 			header.Name += "/"
 		}
 
+		//make mod time correct
+		header.Format = tar.FormatPAX
+
 		err = tarWriter.WriteHeader(header)
 		if err != nil {
 			return fmt.Errorf("%s: writing header: %v", path, err)
@@ -230,7 +233,7 @@ func untarFile(tr *tar.Reader, header *tar.Header, destination string) error {
 	case tar.TypeDir:
 		return mkdir(destpath)
 	case tar.TypeReg, tar.TypeRegA, tar.TypeChar, tar.TypeBlock, tar.TypeFifo:
-		return writeNewFile(destpath, tr, header.FileInfo().Mode())
+		return writeNewFileWithFileInfo(destpath, tr, header.FileInfo().Mode(), header.FileInfo())
 	case tar.TypeSymlink:
 		return writeNewSymbolicLink(destpath, header.Linkname)
 	case tar.TypeLink:
