@@ -2,4 +2,6 @@
 _gitignore
 builds/
 *.test
+*.idea
+*.idea/workspace.xml
 cmd/archiver/archiver
