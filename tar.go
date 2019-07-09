@@ -9,10 +9,17 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"log"
 )
 
 // Tar is for Tar format
 var Tar tarFormat
+
+var(
+	defaultFilterFunc = func(path string)bool{
+		return false
+	}
+)
 
 func init() {
 	RegisterFormat("Tar", Tar)
@@ -85,7 +92,14 @@ func hasTarHeader(buf []byte) bool {
 // files are stored at the 'root' of the archive, and
 // directories are recursively added.
 func (tarFormat) Write(output io.Writer, filePaths []string) error {
-	return writeTar(filePaths, output, "")
+	return writeTar("", filePaths, output, "", true, defaultFilterFunc)
+}
+
+func (tarFormat) Write2(output io.Writer, pathPrefix string, filePaths []string, recursive bool, filterFunc func(path string)bool) error {
+	if filterFunc==nil{
+		filterFunc = defaultFilterFunc
+	}
+	return writeTar(pathPrefix, filePaths, output, "", recursive, filterFunc)
 }
 
 // Make creates a .tar file at tarPath containing the
@@ -100,21 +114,21 @@ func (tarFormat) Make(tarPath string, filePaths []string) error {
 	}
 	defer out.Close()
 
-	return writeTar(filePaths, out, tarPath)
+	return writeTar("", filePaths, out, tarPath, true, defaultFilterFunc)
 }
 
-func writeTar(filePaths []string, output io.Writer, dest string) error {
+func writeTar(pathPrefix string, filePaths []string, output io.Writer, dest string, recursive bool, filterFunc func(path string)bool) error {
 	tarWriter := tar.NewWriter(output)
 	defer tarWriter.Close()
 
-	return tarball(filePaths, tarWriter, dest)
+	return tarball(pathPrefix, filePaths, tarWriter, dest, recursive, filterFunc)
 }
 
 // tarball writes all files listed in filePaths into tarWriter, which is
 // writing into a file located at dest.
-func tarball(filePaths []string, tarWriter *tar.Writer, dest string) error {
+func tarball(pathPrefix string, filePaths []string, tarWriter *tar.Writer, dest string, recursive bool, filterFunc func(path string)bool) error {
 	for _, fpath := range filePaths {
-		err := tarFile(tarWriter, fpath, dest)
+		err := tarFile(tarWriter, pathPrefix, fpath, dest, recursive, filterFunc)
 		if err != nil {
 			return err
 		}
@@ -124,7 +138,13 @@ func tarball(filePaths []string, tarWriter *tar.Writer, dest string) error {
 
 // tarFile writes the file at source into tarWriter. It does so
 // recursively for directories.
-func tarFile(tarWriter *tar.Writer, source, dest string) error {
+func tarFile(tarWriter *tar.Writer, pathPrefix string, source, dest string, recursive bool, filterFunc func(path string)bool) error {
+
+	//if len(pathPrefix)>0 && !strings.HasPrefix(source, pathPrefix){
+		//return fmt.Errorf("%s doesnot has prefix of %s",source,pathPrefix)
+		//return nil
+	//}
+
 	sourceInfo, err := os.Stat(source)
 	if err != nil {
 		return fmt.Errorf("%s: stat: %v", source, err)
@@ -134,19 +154,43 @@ func tarFile(tarWriter *tar.Writer, source, dest string) error {
 	if sourceInfo.IsDir() {
 		baseDir = filepath.Base(source)
 	}
+	if len(pathPrefix)>0 && strings.HasPrefix(source, pathPrefix){
+		baseDir = filepath.Base(pathPrefix)
+	}
 
-	return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+	var gitConfigPath = filepath.Join(source,".git")
+	source = filepath.Dir(gitConfigPath)
+
+	addToTarFunc := func(source, fpath string, info os.FileInfo, err error) error{
+
 		if err != nil {
-			return fmt.Errorf("error walking to %s: %v", path, err)
+			return fmt.Errorf("error walking to %s: %v", fpath, err)
 		}
 
-		header, err := tar.FileInfoHeader(info, path)
+		// filter
+		if strings.HasPrefix(fpath, gitConfigPath){
+			return nil
+		}
+		if len(fpath)>len(source){
+			pathToCheck := fpath[len(source)+1:]
+			if info.IsDir(){
+				pathToCheck = filepath.ToSlash(pathToCheck)
+				if !strings.HasSuffix(pathToCheck, "/"){
+					pathToCheck = pathToCheck + "/"
+				}
+			}
+			if filterFunc(pathToCheck){
+				return nil
+			}
+		}
+
+		header, err := tar.FileInfoHeader(info, fpath)
 		if err != nil {
-			return fmt.Errorf("%s: making header: %v", path, err)
+			return fmt.Errorf("%s: making header: %v", fpath, err)
 		}
 
 		if baseDir != "" {
-			header.Name = filepath.ToSlash(filepath.Join(baseDir, strings.TrimPrefix(path, source)))
+			header.Name = filepath.ToSlash(filepath.Join(baseDir, strings.TrimPrefix(fpath, source)))
 		}
 
 		if header.Name == dest {
@@ -163,7 +207,7 @@ func tarFile(tarWriter *tar.Writer, source, dest string) error {
 
 		err = tarWriter.WriteHeader(header)
 		if err != nil {
-			return fmt.Errorf("%s: writing header: %v", path, err)
+			return fmt.Errorf("%s: writing header: %v", fpath, err)
 		}
 
 		if info.IsDir() {
@@ -171,19 +215,32 @@ func tarFile(tarWriter *tar.Writer, source, dest string) error {
 		}
 
 		if header.Typeflag == tar.TypeReg {
-			file, err := os.Open(path)
+			file, err := os.Open(fpath)
 			if err != nil {
-				return fmt.Errorf("%s: open: %v", path, err)
+				err = fmt.Errorf("%s: open: %v", fpath, err)
+				log.Printf("write err:%v",err)
+				return err
 			}
 			defer file.Close()
 
 			_, err = io.CopyN(tarWriter, file, info.Size())
 			if err != nil && err != io.EOF {
-				return fmt.Errorf("%s: copying contents: %v", path, err)
+				err = fmt.Errorf("%s: copying contents: %v", fpath, err)
+				log.Printf("write err:%v",err)
+				return err
 			}
 		}
 		return nil
-	})
+	}
+
+	if recursive{
+		return filepath.Walk(source, func(fpath string, info os.FileInfo, err error) error {
+			return addToTarFunc(source, fpath, info, err)
+		})
+	}
+
+
+	return addToTarFunc(pathPrefix, source, sourceInfo, nil)
 }
 
 // Read untars a .tar file read from a Reader and puts

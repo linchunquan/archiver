@@ -79,7 +79,7 @@ func writeTarBz2(filePaths []string, output io.Writer, dest string) error {
 	}
 	defer bz2w.Close()
 
-	return writeTar(filePaths, bz2w, dest)
+	return writeTar("", filePaths, bz2w, dest, true, nil)
 }
 
 // Read untars a .tar.bz2 file read from a Reader and decompresses

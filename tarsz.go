@@ -69,7 +69,7 @@ func writeTarSz(filePaths []string, output io.Writer, dest string) error {
 	szw := snappy.NewBufferedWriter(output)
 	defer szw.Close()
 
-	return writeTar(filePaths, szw, dest)
+	return writeTar("", filePaths, szw, dest, true, nil)
 }
 
 // Read untars a .tar.sz file read from a Reader and decompresses

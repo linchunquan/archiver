@@ -47,12 +47,24 @@ func isTarGz(targzPath string) bool {
 	return hasTarHeader(buf)
 }
 
+
 // Write outputs a .tar.gz file to a Writer containing
 // the contents of files listed in filePaths. It works
 // the same way Tar does, but with gzip compression.
 func (tarGzFormat) Write(output io.Writer, filePaths []string) error {
-	return writeTarGz(filePaths, output, "")
+	return writeTarGz("", filePaths, output, "", true, defaultFilterFunc)
 }
+
+// Write outputs a .tar.gz file to a Writer containing
+// the contents of files listed in filePaths. It works
+// the same way Tar does, but with gzip compression.
+func (tarGzFormat) Write2(output io.Writer, pathPrefix string, filePaths []string, recursive bool, filterFunc func(path string)bool) error {
+	if filterFunc==nil{
+		filterFunc = defaultFilterFunc
+	}
+	return writeTarGz(pathPrefix, filePaths, output, "", recursive, filterFunc)
+}
+
 
 // Make creates a .tar.gz file at targzPath containing
 // the contents of files listed in filePaths. It works
@@ -64,14 +76,14 @@ func (tarGzFormat) Make(targzPath string, filePaths []string) error {
 	}
 	defer out.Close()
 
-	return writeTarGz(filePaths, out, targzPath)
+	return writeTarGz("", filePaths, out, targzPath, true, nil)
 }
 
-func writeTarGz(filePaths []string, output io.Writer, dest string) error {
+func writeTarGz(pathPrefix string, filePaths []string, output io.Writer, dest string, recursive bool, filterFunc func(path string)bool) error {
 	gzw := gzip.NewWriter(output)
 	defer gzw.Close()
 
-	return writeTar(filePaths, gzw, dest)
+	return writeTar(pathPrefix, filePaths, gzw, dest, recursive, filterFunc)
 }
 
 // Read untars a .tar.gz file read from a Reader and decompresses

@@ -68,8 +68,7 @@ func (tarLz4Format) Make(tarlz4Path string, filePaths []string) error {
 func writeTarLz4(filePaths []string, output io.Writer, dest string) error {
 	lz4w := lz4.NewWriter(output)
 	defer lz4w.Close()
-
-	return writeTar(filePaths, lz4w, dest)
+	return writeTar("", filePaths, lz4w, dest, true, nil)
 }
 
 // Read untars a .tar.xz file read from a Reader and decompresses
