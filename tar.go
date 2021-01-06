@@ -5,11 +5,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"log"
 )
 
 // Tar is for Tar format
@@ -145,7 +145,7 @@ func tarFile(tarWriter *tar.Writer, pathPrefix string, source, dest string, recu
 		//return nil
 	//}
 
-	sourceInfo, err := os.Stat(source)
+	sourceInfo, err := os.Lstat(source)
 	if err != nil {
 		return fmt.Errorf("%s: stat: %v", source, err)
 	}
@@ -184,7 +184,16 @@ func tarFile(tarWriter *tar.Writer, pathPrefix string, source, dest string, recu
 			}
 		}
 
-		header, err := tar.FileInfoHeader(info, fpath)
+		headerPath := fpath
+		if info.Mode()&os.ModeSymlink != 0 {
+			source, err := os.Readlink(fpath)
+			if err != nil{
+				return err
+			}
+			headerPath = source
+		}
+
+		header, err := tar.FileInfoHeader(info, headerPath)
 		if err != nil {
 			return fmt.Errorf("%s: making header: %v", fpath, err)
 		}
